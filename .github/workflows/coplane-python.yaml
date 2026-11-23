@@ -1,0 +1,118 @@
+name: Python
+
+on:
+  pull_request:
+  push:
+    branches:
+      - coplane
+    tags:
+      - 'coplane-python-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            target: x86_64
+            args: --release --out dist --locked -m bindings/python/Cargo.toml --zig --compatibility manylinux_2_28
+          - os: ubuntu-latest
+            platform: linux
+            target: aarch64
+            args: --release --out dist --locked -m bindings/python/Cargo.toml --zig --compatibility manylinux_2_28
+          - os: windows-latest
+            platform: windows
+            target: x64
+            args: --release --out dist --locked -m bindings/python/Cargo.toml
+          - os: macos-latest
+            platform: macos
+            target: x86_64
+            args: --release --out dist --locked -m bindings/python/Cargo.toml
+          - os: macos-latest
+            platform: macos
+            target: aarch64
+            args: --release --out dist --locked -m bindings/python/Cargo.toml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          target: ${{ matrix.target }}
+          args: ${{ matrix.args }}
+          manylinux: auto
+          sccache: 'true'
+          rust-toolchain: 1.99.0
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels-${{ matrix.platform }}-${{ matrix.target }}
+          path: dist
+
+  test:
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels-linux-x86_64
+          path: dist
+      - name: Run binding tests
+        working-directory: bindings/python
+        run: |
+          pip install ../../dist/*.whl
+          python -m unittest test_sync.py test_async.py
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build sdist
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          args: --out dist -m bindings/python/Cargo.toml
+      - name: Upload sdist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels-sdist
+          path: dist
+
+  release:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/coplane-python-v')
+    needs: [wheels, test, sdist]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/coplane-zen-engine
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check tag matches crate version
+        run: |
+          crate_version=$(grep -m1 '^version' bindings/python/Cargo.toml | cut -d '"' -f2)
+          test "coplane-python-v${crate_version}" = "${GITHUB_REF_NAME}"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3

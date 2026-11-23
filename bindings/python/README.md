@@ -1,5 +1,7 @@
 # Python Rules Engine
 
+> This is the Coplane build of [gorules/zen](https://github.com/gorules/zen). It adds the `httpHandler` engine option from [gorules/zen#521](https://github.com/gorules/zen/pull/521). Use the upstream `zen-engine` package unless you need that option. The package installs the same `zen` module, so do not install both.
+
 **Business logic humans can read and machines can run.** One copy of your rules: the owner reads it, every system runs it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
