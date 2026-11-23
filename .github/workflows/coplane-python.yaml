@@ -75,8 +75,9 @@ jobs:
       - name: Run binding tests
         working-directory: bindings/python
         run: |
-          pip install ../../dist/*.whl
-          python -m unittest test_sync.py test_async.py
+          pip install ../../dist/*.whl pytest
+          # The *_http_function tests call fakestoreapi.com, which is unreliable from CI.
+          pytest test_sync.py test_async.py -k 'not http_function'
 
   sdist:
     runs-on: ubuntu-latest
